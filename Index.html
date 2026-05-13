@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cortador de YouTube - AV Tool</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        ::-webkit-scrollbar { width: 8px; }
+        ::-webkit-scrollbar-track { background: #1f2937; }
+        ::-webkit-scrollbar-thumb { background: #4b5563; border-radius: 4px; }
+        ::-webkit-scrollbar-thumb:hover { background: #6b7280; }
+    </style>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen font-sans">
+
+    <div class="max-w-4xl mx-auto p-6">
+        <header class="mb-8 text-center">
+            <h1 class="text-3xl font-bold text-red-500 mb-2"><i class="fa-brands fa-youtube mr-2"></i>YT Clipper</h1>
+            <p class="text-gray-400 text-sm">El archivo procesado pasará a tu navegador con su nombre original.</p>
+        </header>
+
+        <!-- Sección de URL -->
+        <div class="bg-gray-800 p-6 rounded-lg shadow-lg mb-6 border border-gray-700">
+            <label for="yt-url" class="block text-sm font-medium text-gray-300 mb-2">URL del Video de YouTube</label>
+            <div class="flex gap-2">
+                <input type="text" id="yt-url" placeholder="https://www.youtube.com/watch?v=..." 
+                    class="flex-1 bg-gray-900 border border-gray-600 text-white text-sm rounded-lg focus:ring-red-500 focus:border-red-500 block w-full p-2.5">
+                <button id="load-btn" class="bg-red-600 hover:bg-red-700 text-white font-medium rounded-lg text-sm px-5 py-2.5 transition-colors">
+                    Cargar
+                </button>
+            </div>
+        </div>
+
+        <!-- Reproductor y Controles -->
+        <div id="editor-section" class="hidden bg-gray-800 p-6 rounded-lg shadow-lg border border-gray-700">
+            
+            <div class="aspect-video bg-black rounded-lg overflow-hidden mb-6 relative">
+                <div id="player"></div>
+            </div>
+
+            <!-- Controles de Timecode -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
+                <!-- Punto IN -->
+                <div class="bg-gray-900 p-4 rounded border border-gray-700">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-xs font-bold text-gray-400 tracking-wider">PUNTO IN</span>
+                        <button id="set-in-btn" class="text-xs bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded transition-colors">
+                            <i class="fa-solid fa-crosshairs mr-1"></i> Usar actual
+                        </button>
+                    </div>
+                    <input type="text" id="time-in" value="00:00:00.000" class="bg-transparent text-2xl font-mono text-white focus:outline-none w-full border-b border-gray-600 focus:border-red-500 pb-1" readonly>
+                </div>
+
+                <!-- Punto OUT -->
+                <div class="bg-gray-900 p-4 rounded border border-gray-700">
+                    <div class="flex justify-between items-center mb-2">
+                        <span class="text-xs font-bold text-gray-400 tracking-wider">PUNTO OUT</span>
+                        <button id="set-out-btn" class="text-xs bg-gray-700 hover:bg-gray-600 px-3 py-1 rounded transition-colors">
+                            <i class="fa-solid fa-crosshairs mr-1"></i> Usar actual
+                        </button>
+                    </div>
+                    <input type="text" id="time-out" value="00:00:00.000" class="bg-transparent text-2xl font-mono text-white focus:outline-none w-full border-b border-gray-600 focus:border-red-500 pb-1" readonly>
+                </div>
+            </div>
+
+            <div class="text-sm text-gray-400 mb-6 flex justify-between items-center bg-gray-900 p-3 rounded">
+                <span>Duración: <strong id="clip-duration" class="text-white">0s</strong></span>
+                <button id="reset-btn" class="text-red-400 hover:text-red-300"><i class="fa-solid fa-rotate-left"></i> Reiniciar marcas</button>
+            </div>
+
+            <!-- Selectores de Formato y Calidad -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6 bg-gray-900 p-4 rounded border border-gray-700">
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 tracking-wider mb-2">FORMATO</label>
+                    <select id="format-select" class="bg-gray-800 border border-gray-600 text-white text-sm rounded focus:ring-red-500 focus:border-red-500 block w-full p-2.5">
+                        <option value="mp4">Video (MP4)</option>
+                        <option value="mp3">Solo Audio (MP3)</option>
+                    </select>
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-400 tracking-wider mb-2">CALIDAD MÁXIMA DE VIDEO</label>
+                    <select id="quality-select" class="bg-gray-800 border border-gray-600 text-white text-sm rounded focus:ring-red-500 focus:border-red-500 block w-full p-2.5">
+                        <option value="best">Máxima Disponible (Source)</option>
+                        <option value="1080">Hasta 1080p</option>
+                        <option value="720">Hasta 720p</option>
+                        <option value="480">Hasta 480p</option>
+                    </select>
+                </div>
+            </div>
+
+            <button id="download-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold rounded-lg text-lg px-5 py-4 transition-colors flex justify-center items-center gap-2">
+                <i class="fa-solid fa-server"></i> Generar Archivo
+            </button>
+        </div>
+    </div>
+
+    <!-- YouTube IFrame API -->
+    <script src="https://www.youtube.com/iframe_api"></script>
+    <script>
+        let player, isPlayerReady = false, currentVideoId = '', timeInSeconds = 0, timeOutSeconds = 0;
+
+        const urlInput = document.getElementById('yt-url');
+        const loadBtn = document.getElementById('load-btn');
+        const editorSection = document.getElementById('editor-section');
+        const timeInInput = document.getElementById('time-in');
+        const timeOutInput = document.getElementById('time-out');
+        const clipDurationSpan = document.getElementById('clip-duration');
+        const formatSelect = document.getElementById('format-select');
+        const qualitySelect = document.getElementById('quality-select');
+        const downloadBtn = document.getElementById('download-btn');
+
+        formatSelect.addEventListener('change', (e) => {
+            qualitySelect.disabled = e.target.value === 'mp3';
+            if(e.target.value === 'mp3') qualitySelect.classList.add('opacity-50');
+            else qualitySelect.classList.remove('opacity-50');
+        });
+
+        function extractVideoID(url) {
+            const match = url.match(/^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/);
+            return (match && match[7].length === 11) ? match[7] : false;
+        }
+
+        function formatTimecode(sec) {
+            const pad = (num, size) => ('000' + num).slice(size * -1);
+            return `${pad(Math.floor(sec/3600),2)}:${pad(Math.floor((sec%3600)/60),2)}:${pad(Math.floor(sec%60),2)}.${pad(Math.floor((sec%1)*1000),3)}`;
+        }
+
+        function updateClipDuration() {
+            if (timeOutSeconds > timeInSeconds) clipDurationSpan.textContent = `${(timeOutSeconds - timeInSeconds).toFixed(2)} segundos`;
+            else clipDurationSpan.textContent = 'Inválido';
+        }
+
+        function onYouTubeIframeAPIReady() {}
+
+        function loadVideo() {
+            const videoId = extractVideoID(urlInput.value.trim());
+            if (!videoId) return alert('URL inválida.');
+            currentVideoId = videoId;
+            editorSection.classList.remove('hidden');
+
+            if (player) { player.loadVideoById(videoId); resetMarks(); }
+            else {
+                player = new YT.Player('player', {
+                    height: '100%', width: '100%', videoId: videoId,
+                    playerVars: { 'playsinline': 1, 'rel': 0 },
+                    events: { 'onReady': () => { isPlayerReady = true; resetMarks(); }, 'onStateChange': onPlayerStateChange }
+                });
+            }
+        }
+
+        function onPlayerStateChange(event) {
+            if (event.data === YT.PlayerState.PLAYING && timeOutSeconds === 0) {
+                timeOutSeconds = player.getDuration();
+                timeOutInput.value = formatTimecode(timeOutSeconds);
+            }
+        }
+
+        function resetMarks() {
+            timeInSeconds = 0;
+            timeOutSeconds = player.getDuration() || 0;
+            timeInInput.value = formatTimecode(timeInSeconds);
+            timeOutInput.value = formatTimecode(timeOutSeconds);
+            updateClipDuration();
+        }
+
+        loadBtn.addEventListener('click', loadVideo);
+        urlInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') loadVideo(); });
+
+        document.getElementById('set-in-btn').addEventListener('click', () => {
+            if (isPlayerReady) { timeInSeconds = player.getCurrentTime(); timeInInput.value = formatTimecode(timeInSeconds); updateClipDuration(); }
+        });
+
+        document.getElementById('set-out-btn').addEventListener('click', () => {
+            if (isPlayerReady) { 
+                timeOutSeconds = player.getCurrentTime(); 
+                if(timeOutSeconds <= timeInSeconds) timeOutSeconds = timeInSeconds + 1;
+                timeOutInput.value = formatTimecode(timeOutSeconds); updateClipDuration(); 
+            }
+        });
+
+        document.getElementById('reset-btn').addEventListener('click', resetMarks);
+
+        downloadBtn.addEventListener('click', async () => {
+            if (!currentVideoId) return;
+            
+            const originalText = downloadBtn.innerHTML;
+            downloadBtn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Cortando video y transfiriendo...';
+            downloadBtn.disabled = true;
+            downloadBtn.classList.replace('bg-green-600', 'bg-gray-600');
+
+            try {
+                const response = await fetch('/api/download', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        video_id: currentVideoId,
+                        start_time: timeInSeconds,
+                        end_time: timeOutSeconds,
+                        format_type: formatSelect.value,
+                        quality: qualitySelect.value
+                    })
+                });
+
+                if (!response.ok) throw new Error('Error de servidor');
+
+                // Extraemos el nombre original procesado por yt-dlp
+                let filename = `Clip_${currentVideoId}.mp4`;
+                const contentDisposition = response.headers.get('Content-Disposition');
+                if (contentDisposition) {
+                    const match = contentDisposition.match(/filename\*=UTF-8''([^;]+)/);
+                    if (match && match[1]) {
+                        filename = decodeURIComponent(match[1]);
+                    }
+                }
+
+                // Generamos el Blob y forzamos la descarga nativa
+                const blob = await response.blob();
+                const url = window.URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.style.display = 'none';
+                a.href = url;
+                a.download = filename; // Aquí va el nombre con el título de YouTube
+                document.body.appendChild(a);
+                a.click();
+                
+                // Limpieza de memoria en el navegador
+                window.URL.revokeObjectURL(url);
+                document.body.removeChild(a);
+                
+            } catch (error) {
+                alert('Fallo en el procesamiento.');
+                console.error(error);
+            } finally {
+                downloadBtn.innerHTML = originalText;
+                downloadBtn.disabled = false;
+                downloadBtn.classList.replace('bg-gray-600', 'bg-green-600');
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+services:
+  - type: web
+    name: yt-clipper-christian
+    runtime: python
+    buildCommand: |
+      pip install -r requirements.txt
+      # Comando para instalar ffmpeg en el servidor de Render
+      apt-get update && apt-get install -y ffmpeg
+    startCommand: gunicorn app:app
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.10.0
